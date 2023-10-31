@@ -1,3 +1,6 @@
+/*
+ * From https://github.com/opengl-tutorials/ogl
+*/
 #ifndef SHADER_HPP
 #define SHADER_HPP
 

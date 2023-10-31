@@ -1,3 +1,7 @@
+/*
+ * From https://github.com/opengl-tutorials/ogl
+*/
+
 #include <stdio.h>
 #include <string>
 #include <vector>
