@@ -35,7 +35,18 @@ constexpr float BALL_SCALE = 0.3f;
 #endif
 #endif
 #endif
+namespace GLLoc {
+	enum _GLLoc : GLint {
+		vertexPosition_modelspace,
+		vertexNormal_modelspace,
+		M,
+		M_1,
+		M_2,
+		M_3
+	};
 
+	using GLLoc = _GLLoc;
+}
 class GLEWTrap {
 public:
 	GLEWTrap() {
@@ -241,19 +252,20 @@ struct StaticMeshes {
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IBO());
 
 
-		glEnableVertexAttribArray(0);
-		glEnableVertexAttribArray(1);
 
-		glEnableVertexAttribArray(2);
-		glEnableVertexAttribArray(3);
-		glEnableVertexAttribArray(4);
-		glEnableVertexAttribArray(5);
+		glEnableVertexAttribArray(GLLoc::vertexPosition_modelspace);
+		glEnableVertexAttribArray(GLLoc::vertexNormal_modelspace);
+
+		glEnableVertexAttribArray(GLLoc::M);
+		glEnableVertexAttribArray(GLLoc::M_1);
+		glEnableVertexAttribArray(GLLoc::M_2);
+		glEnableVertexAttribArray(GLLoc::M_3);
 
 		//glEnableVertexAttribArray(2);
 
 		// 1st attribute buffer : verticies
 		glVertexAttribPointer(
-			0,								  // attribute
+			GLLoc::vertexPosition_modelspace, // attribute
 			3,								  // size
 			GL_FLOAT,						  // type
 			GL_FALSE,						  // normalized?
@@ -263,7 +275,7 @@ struct StaticMeshes {
 
 		// 2rd attribute buffer : normals
 		glVertexAttribPointer(
-			1,                                // attribute
+			GLLoc::vertexNormal_modelspace,   // attribute
 			3,                                // size
 			GL_FLOAT,                         // type
 			GL_FALSE,                         // normalized?
@@ -272,17 +284,17 @@ struct StaticMeshes {
 		);
 
 		//glBindBuffer(GL_ARRAY_BUFFER, InstanceBuffer());
-		glVertexAttribFormat(2, 4, GL_FLOAT, GL_FALSE, 0);
-		glVertexAttribFormat(3, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 4);
-		glVertexAttribFormat(4, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 8);
-		glVertexAttribFormat(5, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 12);
+		glVertexAttribFormat(GLLoc::M, 4, GL_FLOAT, GL_FALSE, 0);
+		glVertexAttribFormat(GLLoc::M_1, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 4);
+		glVertexAttribFormat(GLLoc::M_2, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 8);
+		glVertexAttribFormat(GLLoc::M_3, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 12);
 
-		glVertexAttribBinding(2, 2);
-		glVertexAttribBinding(3, 2);
-		glVertexAttribBinding(4, 2);
-		glVertexAttribBinding(5, 2);
-		
-		glVertexBindingDivisor(2, 1);
+		glVertexAttribBinding(GLLoc::M, GLLoc::M);
+		glVertexAttribBinding(GLLoc::M_1, GLLoc::M);
+		glVertexAttribBinding(GLLoc::M_2, GLLoc::M);
+		glVertexAttribBinding(GLLoc::M_3, GLLoc::M);
+
+		glVertexBindingDivisor(GLLoc::M, 1);
 
 /*
 		glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, (void*)(0));
@@ -612,12 +624,12 @@ public:
 				glUniform3f(program.uniforms.ColorID, color.x, color.y, color.z);
 
 				if (prd.numPipes) {
-					glBindVertexBuffer(2, prd.buffer.buffers[0], 0, sizeof(float) * 16);
+					glBindVertexBuffer(GLLoc::M, prd.buffer.buffers[0], 0, sizeof(float) * 16);
 					glDrawElementsInstanced(GL_TRIANGLES, (GLsizei)(meshes.numSubElements[1] * 3), GL_UNSIGNED_SHORT, (void*)meshes.subOffsets[1], prd.numPipes);
 				} 
 				
 				if (prd.numBalls) {
-					glBindVertexBuffer(2, prd.buffer.buffers[0], prd.ball_offset(), sizeof(float) * 16);
+					glBindVertexBuffer(GLLoc::M, prd.buffer.buffers[0], prd.ball_offset(), sizeof(float) * 16);
 					glDrawElementsInstanced(GL_TRIANGLES, (GLsizei)(meshes.numSubElements[0] * 3), GL_UNSIGNED_SHORT, (void*)meshes.subOffsets[0], prd.numBalls);
 				}
 			}
