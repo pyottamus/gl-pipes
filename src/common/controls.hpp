@@ -3,10 +3,12 @@
 #include <bitset>
 #include <GLFW/glfw3.h>
 #include "keymap.h"
-// Include GLM
+
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+
 #include <iostream>
+
 constexpr double PI = glm::pi<double>();
 namespace _KeyBinds {
 	enum KeyBinds {
@@ -17,6 +19,7 @@ namespace _KeyBinds {
 	};
 }
 using KeyBinds = _KeyBinds::KeyBinds;
+
 template<typename relthis>
 struct Camera {
 
@@ -81,7 +84,6 @@ struct Camera {
 	   key_states{ 0 }
 	 , prevTime{glfwGetTime()}
 	{
-		//glfwSetWindowUserPointer(window, this);
 		glfwGetWindowSize(window, &window_width, &window_height);
 		cursor_x = ((double)window_width) / 2;
 		cursor_y = ((double)window_height) / 2;
@@ -104,25 +106,20 @@ struct Camera {
 		glfwSetCursorPosCallback(window, &Camera::cursor_position_callback_thunk);
 
 		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-
-		//glfwSetCursorPos(window, ((double)window_width) / 2, ((double)window_height) / 2);
-
-
-
-
 	}
+
 	~Camera() {
 
 	}
+
 	void focus_callback(GLFWwindow* window, int focused) {
 		if (focused == GLFW_TRUE) {
-			//std::cout << "Focused" << std::endl;
 			glfwGetCursorPos(window, &cursor_x, &cursor_y);
 			next_cursor_x = cursor_x;
 			next_cursor_y = cursor_y;
 		}
 	}
-	
+
 	void update_pos_from_keys(double deltaTime) {
 
 		float forward_dir = (float)((int)key_states[KeyBinds::forward] - (int)key_states[KeyBinds::backward]);
@@ -154,7 +151,6 @@ struct Camera {
 
 	void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 	{
-		//std::cout << "EVENT" << std::endl;
 		if (key == GLFW_KEY_UNKNOWN)
 			return;
 
@@ -177,7 +173,7 @@ struct Camera {
 		// filter out unbound keys
 		if (keydata.data == 0)
 			return;
-		/*
+		/* Logic map
 		* unset, unpressed, unreleased      (000)->
 		* Pressed : set, pressed, unreleased (110)
 		* Released: ?
@@ -233,7 +229,6 @@ struct Camera {
 	
 	void cursor_position_callback(GLFWwindow* window, double x, double y)
 	{
-		//std::cout << "Cursor x: " << x << '\n' << "Cursor y: " << y << std::endl;
 		next_cursor_x = x;
 		next_cursor_y = y;
 	}

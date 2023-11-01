@@ -5,22 +5,7 @@
 #include <algorithm>
 #include <optional>
 #include  <numeric>
-
-#ifndef unreachable
-#ifdef __GNUC__ // GCC, Clang, ICC
-
-#define unreachable() (__builtin_unreachable())
-
-#else
-#ifdef _MSC_VER // MSVC
-
-#define unreachable() (__assume(false))
-
-#else
-#error "No deffinition for unreachable"
-#endif
-#endif
-#endif
+#include "pyo_stddef.h"
 enum class Direction {
     North,
     South,

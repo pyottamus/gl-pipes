@@ -1,4 +1,3 @@
-#include <bitset>
 template<typename Container, typename _member_ptr>
 class _relthis
 {

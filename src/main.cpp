@@ -14,27 +14,11 @@
 #include "pyoUtils.hpp"
 #include "pyo_rawobj.hpp"
 #include "world.hpp"
-#include <stddef.h>
+#include "pyo_stddef.h"
 
 constexpr float PIPE_SCALE = 0.15f;
 constexpr float BALL_SCALE = 0.3f;
 
-
-#ifndef unreachable
-#ifdef __GNUC__ // GCC, Clang, ICC
-
-#define unreachable() (__builtin_unreachable())
-
-#else
-#ifdef _MSC_VER // MSVC
-
-#define unreachable() (__assume(false))
-
-#else
-#error "No deffinition for unreachable"
-#endif
-#endif
-#endif
 namespace GLLoc {
 	enum _GLLoc : GLint {
 		vertexPosition_modelspace,
@@ -157,7 +141,6 @@ struct VertexArrays {
 
 struct StaticMeshes {
 	GLBuffers<2> buffers;
-	//size_t instance_count;
 
 	size_t verticies_size;
 	size_t uvs_size;
@@ -169,15 +152,7 @@ struct StaticMeshes {
 
 	size_t VBO_size;
 	size_t IBO_size;
-	//size_t InstanceBuffer_size;
 
-/*	struct InstanceBufferStorage {
-		InstanceBufferStorage(GLuint buffer, size_t size) {
-			glNamedBufferStorage(buffer, (GLsizeiptr )size, nullptr, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT);
-		}
-	} instance_buffer_storage_helper;
-	//GLMapedBuffer MInstanceBuffer;
-	*/
 	size_t numElements;
 	std::vector<size_t> numSubElements;
 	std::vector<size_t> subOffsets;
@@ -195,10 +170,6 @@ struct StaticMeshes {
 	constexpr GLuint IBO() const {
 		return buffers.buffers[1];
 	}
-
-	/*(constexpr GLuint InstanceBuffer() const {
-		return buffers.buffers[2];
-	}*/
 
 	StaticMeshes() : buffers{}{
 		
@@ -295,27 +266,6 @@ struct StaticMeshes {
 		glVertexAttribBinding(GLLoc::M_3, GLLoc::M);
 
 		glVertexBindingDivisor(GLLoc::M, 1);
-
-/*
-		glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, (void*)(0));
-		glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 4 * 4, (void*)(sizeof(float) * 4));
-		glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 4 * 4, (void*)(sizeof(float) * 8));
-		glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 4 * 4, (void*)(sizeof(float) * 12));
-		glVertexAttribDivisor(2, 1);
-		glVertexAttribDivisor(3, 1);
-		glVertexAttribDivisor(4, 1);
-		glVertexAttribDivisor(5, 1);
-		/*
-		// 3nd attribute buffer : colors
-		glVertexAttribPointer(
-			2,                                // attribute
-			2,                                // size
-			GL_FLOAT,                         // type
-			GL_FALSE,                         // normalized?
-			0,                                // stride
-			(void*)uvs_offset                 // array buffer offset
-		);
-		*/
 	}
 
 
@@ -466,45 +416,8 @@ public:
 	World world{ 20, 20, 20, 4 };
 	std::vector< PipeRenderData> pipe_render_data;
 	std::vector<glm::mat4> pipe_data;
-	void setupInput() {
-		// Ensure we can capture the escape key being pressed below
-		//glfwSetInputMode(window, GLFW_STICKY_KEYS, GL_TRUE);
-		// Hide the mouse and enable unlimited mouvement
-		glfwSetWindowUserPointer(window, this);
-		//glfwPollEvents();
 
-
-	}
-
-	void make_ball_joint(size_t pipe_id, glm::uvec3 node){
-		/*
-		PipeRenderData prd = pipe_render_data[pipe_id];
-		size_t lower_bound;
-		if (pipe_id == 0) {
-			lower_bound = 1;
-		}
-		else {
-			lower_bound = pipe_render_data[pipe_id - 1].base - (pipe_render_data[pipe_id - 1].numPipes + 1);
-		}
-
-		size_t tail = prd.base - prd.numBalls;
-		if (tail == lower_bound) {
-			/// todo, realloc
-			throw std::runtime_error("can't allocate new pipe ball");
-		}
-		prd.numBalls += 1;
-		tail -= 1;
-		glm::mat4 pos = glm::translate(glm::mat4(), glm::vec3(node));
-		memcpy((char*)meshes.MInstanceBuffer.data + (tail * sizeof(glm::mat4)), &pos, sizeof(glm::mat4));
-		glFlushMappedBufferRange(meshes.InstanceBuffer(), (tail * sizeof(glm::mat4)), sizeof(glm::mat4));
-		*/
-	}
-	void make_pipe_section(size_t pipe_id, Direction dir, glm::uvec3 node) {
-		PipeRenderData prd = pipe_render_data[pipe_id];
-		size_t upper_bound;
-	}
-
-	void setupGL() {
+	void setupGLRenderState() {
 		// Dark blue background
 		glClearColor(0.0f, 0.0f, 0.4f, 0.0f);
 
@@ -513,14 +426,17 @@ public:
 		// Accept fragment if it closer to the camera than the former one
 		glDepthFunc(GL_LESS);
 
-		// Cull triangles which normal is not towards the camera
+		// Cull backfaces
 		glEnable(GL_CULL_FACE);
 	}
 	App() : glfw_trap{}, window{ this }, glew_trap{}, camera{ window }, program{}, meshes{ }, pipe_data{ 100 }{
-		// Initialise GLFW
+		// Preallocate space (emplace_back would trigger resize otherwise), since GLMappedBuffer and 
+		// GLBuffers can't be coppied, and C++ lack destructive-move semantics
 		pipe_render_data.reserve(world.max_pipes);
-		setupInput();
-		setupGL();
+
+		glfwSetWindowUserPointer(window, this);
+
+		setupGLRenderState();
 	}
 	void update_world() {
 		if (!world.is_gen_complete()) {
@@ -568,72 +484,48 @@ public:
 		}
 	}
 	void run() {
-		/*
-		glm::mat4 pos[3];
-		pos[0] = glm::mat4{ {1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 1, 2, 1} };
-
-		pos[1] = glm::mat4{ {1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1} };
-		pos[2] = glm::mat4{ {1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 1, -2, 1} };
-		pos[2] = glm::rotate(pos[2], glm::radians<float>(90), glm::vec3{ 1, 0, 0 });
-		*/
-		//memcpy(meshes.MInstanceBuffer.data, pos, 3 * sizeof(glm::mat4));
-		//glFlushMappedBufferRange(meshes.InstanceBuffer(), 0, sizeof(glm::mat4));
-
 		program.use();
 		//glActiveTexture(GL_TEXTURE0);
 		//glBindTexture(GL_TEXTURE_2D, texture.texture);
-		// Set our "myTextureSampler" sampler to use Texture Unit 0
 		//glUniform1i(program.uniforms.TextureID, 0);
 
 		// set the light position
 		glm::vec3 lightPos = glm::vec3(4, 4, 4);
 		glUniform3f(program.uniforms.LightID, lightPos.x, lightPos.y, lightPos.z);
-		//glBindVertexBuffer(2, prd.buffer.buffers[0], 0, sizeof(float) * 16);
+
 		double prevTime = glfwGetTime();
 		do {
-
-
-			// Clear the screen
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-
-			// Compute the MVP matrix from keyboard and mouse input
-			
 			camera.update();
-			glm::mat4 ModelMatrix = glm::mat4(1.0);
-			glm::mat4 MVP = camera.projectionMatrix * camera.viewMatrix * ModelMatrix;
 
-			// in the "MVP" uniform
 			glUniformMatrix4fv(program.uniforms.PerspectiveID, 1, GL_FALSE, &camera.projectionMatrix[0][0]);
-			//glUniformMatrix4fv(program.uniforms.ModelMatrixID, 1, GL_FALSE, &ModelMatrix[0][0]);
 			glUniformMatrix4fv(program.uniforms.ViewMatrixID, 1, GL_FALSE, &camera.viewMatrix[0][0]);
 
-
-			// Draw the triangles !
-			//glDrawElementsInstancedBaseInstance(GL_TRIANGLES, (GLsizei)(meshes.numSubElements[0] * 3), GL_UNSIGNED_SHORT, (void*)meshes.subOffsets[0], 1, 0);
-
+			// check if the world should be updated
 			double curTime = glfwGetTime();
 			if (curTime - prevTime >= 1.0L) {
 				prevTime = curTime;
 				update_world();
-
 			}
+
+			// Draw each pipe
 			for (int pipe_id = 0; pipe_id < pipe_render_data.size(); ++pipe_id) {
 				PipeRenderData& prd = pipe_render_data[pipe_id];
+				// Bind the correct color
 				const glm::vec3& color = world.colors[pipe_id];
 				glUniform3f(program.uniforms.ColorID, color.x, color.y, color.z);
 
+				// Draw the tubes
 				if (prd.numPipes) {
 					glBindVertexBuffer(GLLoc::M, prd.buffer.buffers[0], 0, sizeof(float) * 16);
 					glDrawElementsInstanced(GL_TRIANGLES, (GLsizei)(meshes.numSubElements[1] * 3), GL_UNSIGNED_SHORT, (void*)meshes.subOffsets[1], prd.numPipes);
 				} 
-				
+				// Draw the balls
 				if (prd.numBalls) {
 					glBindVertexBuffer(GLLoc::M, prd.buffer.buffers[0], prd.ball_offset(), sizeof(float) * 16);
 					glDrawElementsInstanced(GL_TRIANGLES, (GLsizei)(meshes.numSubElements[0] * 3), GL_UNSIGNED_SHORT, (void*)meshes.subOffsets[0], prd.numBalls);
 				}
 			}
-			//glDrawElementsInstanced(GL_TRIANGLES, (GLsizei)(meshes.numSubElements[1] * 3), GL_UNSIGNED_SHORT, (void*)meshes.subOffsets[1], 10);
 
 			// Swap buffers
 			glfwSwapBuffers(window);
@@ -645,11 +537,8 @@ public:
 	}
 };
 
-#include <filesystem>
-
 int main() {
 
-	std::cout << std::filesystem::current_path() <<std::endl;
 	try {
 		App app;
 		app.run();
