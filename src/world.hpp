@@ -52,15 +52,21 @@ struct PipeUpdateData {
         NewPipeData newPipeData;
     } data;
 };
-
-
+/**
+ * @brief A bitmap for ocupied nodes in a 3D grid
+*/
 struct Ocupied {
 
     int x, y, z;
     std::vector<bool> ocupied_nodes;
     std::vector<uint64_t> free_map0;
     size_t used = 0;
-
+    /**
+     * @brief Construct a new Ocupied object
+     * @param x spatial bounds in the x axis
+     * @param y spatial bounds in the y axis
+     * @param z spatial bounds in the z axis
+    */
     Ocupied(int x, int y, int z) : x{ x }, y{ y }, z{ z }, ocupied_nodes(x* y* z, false), free_map0( ( 63 + x * y * z) / 64, UINT64_MAX) {
         size_t leftover = (free_map0.size() * 64) - ocupied_nodes.size();
         if (leftover) {
@@ -101,8 +107,12 @@ struct Ocupied {
         set(vecToi(i));
     }
 
-
-    std::optional<glm::u64vec3> getRandomFree(auto& rng) {
+    /**
+     * @brief Find a random free location and set it
+     * @param rng A c++ randomness source
+     * @return A random location previously unused(set as used when returned)
+    */
+    std::optional<glm::u64vec3> takeRandomFree(auto& rng) {
         std::vector<size_t> choices(free_map0.size());
         std::iota(choices.begin(), choices.end(), 0);
         std::shuffle(choices.begin(), choices.end(), rng);
@@ -134,7 +144,7 @@ struct Ocupied {
 /// somehow the pipe is already on the board)
 glm::u64vec3 get_random_start(Ocupied& occupied_nodes, auto& rng) {
     //Double check if somehow there is no more space on the board
-    auto coord = occupied_nodes.getRandomFree(rng);
+    auto coord = occupied_nodes.takeRandomFree(rng);
     if (!coord) {
         throw std::runtime_error("No more space on the board!");
     }
@@ -190,7 +200,7 @@ struct Pipe {
         return nodes.size();
     }
 
-    Pipe(glm::uvec3 space_bounds, Ocupied& ocupied_nodes, auto& rng) : space_bounds{ space_bounds } {
+    Pipe(glm::uvec3 space_bounds, Ocupied& ocupied_nodes, auto& rng) : alive{ true }, space_bounds { space_bounds } {
         nodes.emplace_back(get_random_start(ocupied_nodes, rng));
     }
 
@@ -278,7 +288,7 @@ struct World {
     }
     bool chance(double odds) {
         double flip = std::uniform_real_distribution<double>(0., 1.)(rng);
-        return odds < flip;
+        return odds >= flip;
     }
     void new_pipe(PipeUpdateData& data) {
         Pipe& pipe = pipes.emplace_back(bounds, ocupied_nodes, rng);
@@ -314,7 +324,12 @@ struct World {
             active_pipes -= 1;
         }
 
-        if (first_pipe || current_dir == last_dir) {
+        if (first_pipe) {
+            data.type = PipeUpdataType::FIRST_PIPE;
+            data.data.pipeStraightData = { .last_node = last_node, .current_node = current_node, .current_dir = current_dir, .pipe_id = pipe_id };
+
+        }
+        else if (current_dir == last_dir) {
             data.type = PipeUpdataType::PIPE_STRAIGHT;
             data.data.pipeStraightData = { .last_node = last_node, .current_node = current_node, .current_dir = current_dir, .pipe_id = pipe_id };
         }

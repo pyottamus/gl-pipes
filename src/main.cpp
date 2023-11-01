@@ -18,6 +18,8 @@
 
 constexpr float PIPE_SCALE = 0.15f;
 constexpr float BALL_SCALE = 0.3f;
+constexpr int WINDOW_WIDTH = 1024;
+constexpr int WINDOW_HEIGHT = 768;
 
 namespace GLLoc {
 	enum _GLLoc : GLint {
@@ -68,7 +70,7 @@ public:
 		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 		
 		// Open a window and create its OpenGL context
-		window = glfwCreateWindow(1024, 768, "Tutorial 09 - Rendering several models", NULL, NULL);
+		window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "gl_pipes", NULL, NULL);
 		if (window == NULL)
 			throw std::runtime_error("Failed to open GLFW window.If you have an Intel GPU, they are not 3.3 compatible.Try the 2.1 version of the tutorials.");
 		
@@ -173,27 +175,27 @@ struct StaticMeshes {
 
 	StaticMeshes() : buffers{}{
 		
-		RawobjectReader monkey{ "tubes.jpraw" };
-		assert(monkey.sizeof_index_t == 2);
-		assert(monkey.sizeof_element_t == 4);
-		assert(monkey.header.indexed());
-		assert(monkey.header.hasNormal());
-		//assert(monkey.header.hasUV());
+		RawobjectReader tube_mesh{ "tubes.jpraw" };
+		assert(tube_mesh.sizeof_index_t == 2);
+		assert(tube_mesh.sizeof_element_t == 4);
+		assert(tube_mesh.header.indexed());
+		assert(tube_mesh.header.hasNormal());
+		//assert(tube_mesh.header.hasUV());
 
 
-		verticies_size = monkey.offsets.verticies_end - monkey.offsets.verticies_start;
-		//uvs_size = monkey.offsets.uvs_end - monkey.offsets.uvs_start;
-		normals_size = monkey.offsets.normals_end - monkey.offsets.normals_start;
+		verticies_size = tube_mesh.offsets.verticies_end - tube_mesh.offsets.verticies_start;
+		//uvs_size = tube_mesh.offsets.uvs_end - tube_mesh.offsets.uvs_start;
+		normals_size = tube_mesh.offsets.normals_end - tube_mesh.offsets.normals_start;
 
 		vertices_offset = 0;
-		normals_offset = monkey.offsets.normals_start - monkey.offsets.verticies_start;
-		//uvs_offset = monkey.offsets.uvs_start - monkey.offsets.verticies_start;
+		normals_offset = tube_mesh.offsets.normals_start - tube_mesh.offsets.verticies_start;
+		//uvs_offset = tube_mesh.offsets.uvs_start - tube_mesh.offsets.verticies_start;
 
 
-		VBO_size = monkey.arrays_end - monkey.arrays_start;
-		IBO_size = monkey.index_end - monkey.index_start;
+		VBO_size = tube_mesh.arrays_end - tube_mesh.arrays_start;
+		IBO_size = tube_mesh.index_end - tube_mesh.index_start;
 
-		numElements = (monkey.counts.triangles);
+		numElements = (tube_mesh.counts.triangles);
 
 		glNamedBufferStorage(VBO(), VBO_size, nullptr, GL_MAP_WRITE_BIT);
 		glNamedBufferStorage(IBO(), IBO_size, nullptr, GL_MAP_WRITE_BIT);
@@ -202,20 +204,20 @@ struct StaticMeshes {
 		GLMapedBuffer MIBO(IBO(), 0, IBO_size, GL_MAP_WRITE_BIT);
 		//GLMapedBuffer MInstanceBuffer();
 
-		monkey.file.tseek((long)monkey.index_start, SEEK_SET);
-		monkey.file.tread(MIBO.data, 1, IBO_size);
+		tube_mesh.file.tseek((long)tube_mesh.index_start, SEEK_SET);
+		tube_mesh.file.tread(MIBO.data, 1, IBO_size);
 
 
-		monkey.file.tseek((long)monkey.arrays_start, SEEK_SET);
-		monkey.file.tread(MVBO.data, 1, VBO_size);
+		tube_mesh.file.tseek((long)tube_mesh.arrays_start, SEEK_SET);
+		tube_mesh.file.tread(MVBO.data, 1, VBO_size);
 		
-		//numSubElements.resize(monkey.header.obj_count);
-		for (auto count : monkey.obj_counts) {
+		//numSubElements.resize(tube_mesh.header.obj_count);
+		for (auto count : tube_mesh.obj_counts) {
 			numSubElements.push_back(count.triangles);
 		}
 
-		for (const auto& offset : monkey.sub_offsets) {
-			subOffsets.push_back(offset.triangles_start - monkey.index_start);
+		for (const auto& offset : tube_mesh.sub_offsets) {
+			subOffsets.push_back(offset.triangles_start - tube_mesh.index_start);
 		}
 
 		glBindVertexArray(vertex_array());
@@ -254,17 +256,20 @@ struct StaticMeshes {
 			(void*)normals_offset             // array buffer offset
 		);
 
-		//glBindBuffer(GL_ARRAY_BUFFER, InstanceBuffer());
+		// Set the format for the model matricies loc
+		// can't use glVertexAttribPointer since this loc's buffer will be regularly swapped out
 		glVertexAttribFormat(GLLoc::M, 4, GL_FLOAT, GL_FALSE, 0);
 		glVertexAttribFormat(GLLoc::M_1, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 4);
 		glVertexAttribFormat(GLLoc::M_2, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 8);
 		glVertexAttribFormat(GLLoc::M_3, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 12);
-
+		
+		// A mat4 takes up 4 bining locations
 		glVertexAttribBinding(GLLoc::M, GLLoc::M);
 		glVertexAttribBinding(GLLoc::M_1, GLLoc::M);
 		glVertexAttribBinding(GLLoc::M_2, GLLoc::M);
 		glVertexAttribBinding(GLLoc::M_3, GLLoc::M);
 
+		// The model matrix is a per instance attribute
 		glVertexBindingDivisor(GLLoc::M, 1);
 	}
 
@@ -280,7 +285,7 @@ struct Uniforms {
 	GLuint ColorID;
 
 	// Get a handle for our "myTextureSampler" uniform
-	GLuint TextureID;
+	//GLuint TextureID;
 
 	// Get a handle for our "LightPosition" uniform
 	GLuint LightID;
@@ -292,7 +297,7 @@ struct Uniforms {
 
 
 		// Get a handle for our "myTextureSampler" uniform
-		TextureID = glGetUniformLocation(programID, "myTextureSampler");
+		//TextureID = glGetUniformLocation(programID, "myTextureSampler");
 
 		// Get a handle for our "LightPosition" uniform
 		LightID = glGetUniformLocation(programID, "LightPosition_worldspace");
