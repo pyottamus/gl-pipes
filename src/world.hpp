@@ -19,6 +19,7 @@ enum class PipeUpdataType {
     PIPE_STRAIGHT,
     PIPE_BEND,
     FIRST_PIPE,
+    FIRST_PIPE_BEND,
     NEW
 };
 struct PipeStraightData {
@@ -82,7 +83,7 @@ struct Ocupied {
         return ocupied_nodes[i];
     }
     glm::u64vec3 iTovec(size_t i) {
-        size_t z_c = i / x * y;
+        size_t z_c = i / (x * y);
         i %= x * y;
         size_t y_c = i / x;
         i %= x;
@@ -117,19 +118,22 @@ struct Ocupied {
         std::iota(choices.begin(), choices.end(), 0);
         std::shuffle(choices.begin(), choices.end(), rng);
         
-        for (size_t i = 0; i < choices.size(); ++i) {
-            if (choices[i] == 0)
-                continue;
-            uint64_t choice = choices[i];
-            uint8_t bitChoice[64];
-            std::iota(bitChoice, bitChoice + 64, 0);
-            std::shuffle(bitChoice, bitChoice + 64, rng);
+        for (size_t index : choices) {
+            uint64_t choice = free_map0[index];
 
-            for (uint8_t j = 0; j < 64; ++j) {
-                if (choice & (UINT64_C(1) << (bitChoice[j]))) {
-                    size_t index = i * 64 + j;
-                    set(index);
-                    return iTovec(index);
+            if (choice == 0)
+                continue;
+
+            uint8_t bitChoices[64];
+            std::iota(bitChoices, bitChoices + 64, 0);
+            std::shuffle(bitChoices, bitChoices + 64, rng);
+
+            for (uint8_t bitChoice : bitChoices) {
+                uint64_t mask = (UINT64_C(1) << bitChoice);
+                if (choice & mask) {
+                    size_t bit_index = index * 64 + bitChoice;
+                    set(bit_index);
+                    return iTovec(bit_index);
                 }
             }
         }
@@ -156,7 +160,24 @@ Direction choose_random_direction(auto& rng) {
     return (Direction)std::uniform_int_distribution<>{0, 5}(rng);
 }
 
-
+glm::vec3  dirAsVec(Direction dir) {
+    switch (dir) {
+    case Direction::North:
+        return glm::vec3{ 0, 0, -1 };
+    case Direction::South:
+        return glm::vec3{ 0, 0, 1 };
+    case Direction::East:
+        return glm::vec3{ 1, 0, 0 };
+    case Direction::West:
+        return glm::vec3{ -1, 0, 0 };
+    case Direction::Up:
+        return glm::vec3{ 0, 1, 0 };
+    case Direction::Down:
+        return glm::vec3{ 0, -1, 0 };
+    default:
+        unreachable();
+    }
+}
 glm::uvec3 step_in_dir(glm::uvec3 coord, Direction dir) {
     
     switch (dir) {
@@ -216,11 +237,12 @@ struct Pipe {
         if(!alive)
             return;
         
+        size_t num_nodes = nodes.size();
         uint8_t directions_to_try[6] = { 0, 1, 2, 3, 4, 5 };
         bool want_to_turn = std::uniform_int_distribution<>(0, 1)(rng);
         
 
-        if (nodes.size() > 1 && !want_to_turn) {
+        if (num_nodes > 1 && !want_to_turn) {
             std::swap(directions_to_try[(uint8_t)current_dir], directions_to_try[0]);
             std::shuffle(directions_to_try + 1, directions_to_try + 6, rng);
         }
@@ -247,7 +269,6 @@ struct Pipe {
             kill();
             return;
         }
-
         ocupied_nodes.set(new_position);
 
         nodes.emplace_back(new_position);
@@ -308,15 +329,17 @@ struct World {
         size_t color_id = pipe_id;
         glm::uvec3 last_node = pipes[pipe_id].get_current_head();
         Direction last_dir = pipes[pipe_id].get_current_dir();
+        bool first_pipe = pipes[pipe_id].nodes.size() == 1;
+
         pipes[pipe_id].update(ocupied_nodes, rng);
 
         glm::uvec3 current_node = pipes[pipe_id].get_current_head();
         Direction current_dir = pipes[pipe_id].get_current_dir();
-        bool first_pipe = pipes[pipe_id].nodes.size() == 1;
         //Add a random chance post update to kill the pipe
         //increases the more the space is filled
         size_t total_nodes = ocupied_nodes.x * ocupied_nodes.y * ocupied_nodes.z;
         double chance_to_kill = ((double)(ocupied_nodes.used)) / ((double)(total_nodes));
+        assert((int)current_dir >= 0 && (int)current_dir <= 5);
 
         if (pipes[pipe_id].len() >= (total_nodes * 10 / 100) && chance(chance_to_kill))
         {

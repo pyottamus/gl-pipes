@@ -23,7 +23,7 @@ using KeyBinds = _KeyBinds::KeyBinds;
 template<typename relthis>
 struct Camera {
 
-	bool triggers[1]{ false };
+	bool triggers[2]{ false };
 	int window_width, window_height;
 	double cursor_x, cursor_y;
 	double next_cursor_x, next_cursor_y;
@@ -36,11 +36,11 @@ struct Camera {
 	glm::mat4 projectionMatrix;
 
 	// Initial position : on +Z
-	glm::vec3 position = glm::vec3(0, 0, 5);
+	glm::vec3 position = glm::vec3(-20, 10, -20);
 	// Initial horizontal angle : toward -Z
-	float horizontalAngle = (float)PI;
+	float horizontalAngle = PI/4.0f;
 	// Initial vertical angle : none
-	float verticalAngle = 0.0f;
+	float verticalAngle = 0;
 	// Initial Field of View
 	float FoV = 45.0f;
 
@@ -99,6 +99,7 @@ struct Camera {
 		keyMap[PYO_KEY_A].data = 128 | ((uint8_t)KeyBinds::left + 1);
 
 		keyMap[PYO_KEY_ESCAPE].data = 1;
+		keyMap[PYO_KEY_Q].data = 2;
 
 		glfwSetKeyCallback(window, &Camera::key_callback_thunk);
 
@@ -259,8 +260,8 @@ struct Camera {
 		cursor_x = next_cursor_x;
 		cursor_y = next_cursor_y;
 
-
 		update_view_from_cursor_delta(deltaTime, delta_cursor_x, delta_cursor_y);
+
 		update_pos_from_keys(deltaTime);
 		prevTime = curTime;
 		if (key_released[KeyBinds::forward]) {
@@ -276,16 +277,23 @@ struct Camera {
 			key_states[KeyBinds::left] = false;
 		}
 
+
+		
 		key_released.reset();
 		key_pressed.reset();
 		// Projection matrix : 45° Field of View, 4:3 ratio, display range : 0.1 unit <-> 100 units
-		projectionMatrix = glm::perspective(glm::radians(FoV), 4.0f / 3.0f, 0.1f, 100.0f);
+		projectionMatrix = glm::perspective(glm::radians(FoV), 4.0f / 3.0f, 0.1f, 1000.0f);
 		// Camera matrix
 		viewMatrix = glm::lookAt(
 			position,             // Camera is here
 			position + direction, // and looks here : at the same position, plus "direction"
 			up                    // Head is up (set to 0,-1,0 to look upside-down)
 		);
+
+		if (triggers[1]) {
+			triggers[1] = false;
+			std::cout << horizontalAngle << ", " << verticalAngle << std::endl;
+		}
 	}
 };
 

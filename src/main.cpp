@@ -18,6 +18,7 @@
 
 constexpr float PIPE_SCALE = 0.15f;
 constexpr float BALL_SCALE = 0.3f;
+constexpr float BALL_RADIUS = BALL_SCALE / 2.0f;
 constexpr int WINDOW_WIDTH = 1024;
 constexpr int WINDOW_HEIGHT = 768;
 
@@ -333,6 +334,10 @@ struct BufferStorageHelper{
 		glNamedBufferStorage(buffer, (GLsizeiptr)size, nullptr, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT);
 	}
 };
+enum class PipeState {
+	ball,
+	pipe
+};
 
 struct PipeRenderData {
 	size_t numBalls = 0;
@@ -341,24 +346,29 @@ struct PipeRenderData {
 	GLBuffers<1> buffer;
 	BufferStorageHelper _helper;
 	GLMapedBuffer mbuffer;
+
 	void* nextBall;
 	void* nextPipe;
+	
+	glm::vec3 direction;
+	glm::vec3 start;
+	glm::vec3 end;
+
+	bool initialized;
+	float length;
 	PipeRenderData(size_t buffer_size) : buffer_size{ buffer_size }, _helper{ buffer.buffers[0], buffer_size * sizeof(glm::mat4)},
-		mbuffer{ buffer.buffers[0], 0, (GLsizeiptr)(buffer_size*sizeof(glm::mat4)), GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_FLUSH_EXPLICIT_BIT} {
+		mbuffer{ buffer.buffers[0], 0, (GLsizeiptr)(buffer_size*sizeof(glm::mat4)), GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_FLUSH_EXPLICIT_BIT},
+		initialized{ false } {
 		nextPipe = mbuffer.data;
 		nextBall = (char*)mbuffer.data + ((buffer_size - 1) * sizeof(glm::mat4));
 
 
 	}
-
-	
-	void addPipe(glm::vec3 center, Direction dir) {
-		if (nextBall < nextPipe) {
-			// todo, reallocate
-			throw std::runtime_error("out of buffer space");
-		}
-		glm::mat4 M = glm::translate(glm::identity<glm::mat4>(), center);
-
+	void rotateTowardsDirection(glm::mat4& M) {
+		glm::vec3 rot{ direction.z, direction.y, direction.x };
+		M = glm::rotate(M, glm::radians<float>(90), rot);
+	}
+	void rotateTowardsDir(glm::mat4& M, Direction dir) {
 		switch (dir) {
 		case Direction::North:
 		case Direction::South:
@@ -375,23 +385,111 @@ struct PipeRenderData {
 		default:
 			unreachable();
 		}
-		M = glm::scale(M, glm::vec3{1,  6.6667f, 1 });
-
+	}
+	void writePipeMatrix(const glm::mat4& M) {
+		if (nextBall < nextPipe) {
+			// todo, reallocate
+			throw std::runtime_error("out of buffer space");
+		}
 
 		memcpy(nextPipe, &M, sizeof(glm::mat4));
 		glFlushMappedBufferRange(buffer.buffers[0], numPipes * sizeof(glm::mat4), sizeof(glm::mat4));
 		++numPipes;
 		nextPipe = (void*)((char*)nextPipe + sizeof(glm::mat4));
 	}
+	void writeBallMatrix(const glm::mat4& M) {
+		if (nextBall < nextPipe) {
+			// todo, reallocate
+			throw std::runtime_error("out of buffer space");
+		}
+
+		memcpy(nextBall, &M, sizeof(glm::mat4));
+		glFlushMappedBufferRange(buffer.buffers[0], (char*)nextBall - (char*)mbuffer.data, sizeof(glm::mat4));
+		nextBall = (void*)((char*)nextBall - sizeof(glm::mat4));
+		++numBalls;
+	}
+
+	void updatePipeMatrix(const glm::mat4& M) {
+		void* curPipe = (void*)((char*)nextPipe - sizeof(glm::mat4));
+		memcpy(curPipe, &M, sizeof(glm::mat4));
+		glFlushMappedBufferRange(buffer.buffers[0], (numPipes - 1)* sizeof(glm::mat4), sizeof(glm::mat4));
+	}
+
 	GLsizeiptr ball_offset() {
 		return (buffer_size - numBalls) * sizeof(glm::mat4);
 	}
-	void addBend(glm::vec3 center, Direction start, Direction end) {
+
+	void addPipeFromBall(glm::vec3 ballCenter) {
+		glm::vec3 ballEdge_r = ballCenter + direction * BALL_RADIUS;
+		start = ballEdge_r;
+		end = ballCenter + direction - direction * BALL_RADIUS;
+		length = 1.0f - BALL_SCALE;
+
+
+		glm::vec3 center = start + (end - start) / 2.0f;
+		float scale = length / PIPE_SCALE;
+
+		glm::mat4 M = glm::translate(glm::identity<glm::mat4>(), center);
+		rotateTowardsDirection(M);
+		M = glm::scale(M, glm::vec3{ 1,  scale, 1 });
+		// a pipe originating from a ball is always a new pipe
+		writePipeMatrix(M);
+	}
+	void addBend(Direction newDirection, glm::vec3 ballCenter2, glm::vec3 cur_node) {
+
+		end += direction;
+		length += 1;
+		glm::vec3 ballCenter = end + direction * BALL_RADIUS;
+		
+		// update the previous pipe so it connects with this ball
+
+		float scale = length / (float)(PIPE_SCALE);
+
+		glm::vec3 center = start + (end - start) / 2.0f;
+		glm::mat4 M = glm::translate(glm::identity<glm::mat4>(), center);
+		rotateTowardsDirection(M);
+		M = glm::scale(M, glm::vec3{ 1,  scale, 1 });
+		updatePipeMatrix(M);
+
+		direction = dirAsVec(newDirection);
+
+		addBall(ballCenter);
+		addPipeFromBall(ballCenter);
 
 	}
+	void grow(glm::vec3 node) {
+		length += 1;
+		end += direction;
+		float scale = length / (float)(PIPE_SCALE);
+		glm::vec3 center = start + (end - start) / 2.0f;
+		glm::mat4 M = glm::translate(glm::identity<glm::mat4>(), center);
+		rotateTowardsDirection(M);
+		M = glm::scale(M, glm::vec3{ 1,  scale, 1 });
 
-	void addFirstPipe(glm::vec3 center, Direction dir) {
+		updatePipeMatrix(M);			
 
+	}
+	void addFirstPipe(glm::vec3 center, glm::vec3 ballCenter, Direction dir) {
+		initialized = true;
+		direction = dirAsVec(dir);
+		// The first pipe must touch the ball
+		
+		// Vector pointing from ball to pipe center
+
+		
+		// solve for true_center and scaleFactor such that:
+		// - Tube starts at the edge of the ball
+		// - Tube ends at center + dir
+		// For example, if ball is at (0, 0, 0), and center is at (1, 0, 0) (dir is along x)
+		// - Normally, a tube would go from (0, 0, 0) to (1, 0, 0)
+		// - Ball edge is at (BALL_SCALE / 2, 0, 0)
+		// - Tube should start at (BALL_SCALE / 2, 0, 0)
+		// - Tube should end at   (1, 0, 0)
+		// - The tubes true_length is ||(true_end - true_start)|| = 1 - BALL_SCALE / 2
+		// - Therefore, the tubes true center is true_start + (true_end - true_start)/2
+		// - And the scaleFactor is (PIPE_SCALE) * scaleFactor = true_length, scaleFactor = true_length/PIPE_SCALE
+		
+		addPipeFromBall(ballCenter);
 	}
 
 	void addBall(glm::vec3 center) {
@@ -400,10 +498,7 @@ struct PipeRenderData {
 			throw std::runtime_error("out of buffer space");
 		}
 		glm::mat4 M = glm::translate(glm::identity<glm::mat4>(), center);
-		memcpy(nextBall, &M, sizeof(glm::mat4));
-		glFlushMappedBufferRange(buffer.buffers[0], (char*)nextBall - (char*)mbuffer.data, sizeof(glm::mat4));
-		nextBall = (void*)((char*)nextBall - sizeof(glm::mat4));
-		++numBalls;
+		writeBallMatrix(M);
 	}
 
 };
@@ -455,18 +550,18 @@ public:
 					break;
 				case PipeUpdataType::PIPE_STRAIGHT:{
 					PipeStraightData& straightData = update_data.data.pipeStraightData;
-					pipe_render_data[i].addPipe(straightData.current_node, straightData.current_dir);
+					pipe_render_data[i].grow(straightData.current_node);
 					break;
 				}
 				case PipeUpdataType::PIPE_BEND: {
 					PipeBendData& bendData = update_data.data.pipeBendData;
-					pipe_render_data[i].addBall(bendData.last_node);
-					pipe_render_data[i].addPipe(bendData.current_node, bendData.current_dir);
+					pipe_render_data[i].addBend(bendData.current_dir, bendData.last_node, bendData.current_node);
 					break;
 				}
 				case PipeUpdataType::FIRST_PIPE: {
+					std::cout << "FIRST PIPE" << std::endl;
 					PipeStraightData& straightData = update_data.data.pipeStraightData;
-					pipe_render_data[i].addFirstPipe(straightData.current_node, straightData.current_dir);
+					pipe_render_data[i].addFirstPipe(straightData.current_node, straightData.last_node, straightData.current_dir);
 					break;
 				}
 				default:
@@ -476,7 +571,7 @@ public:
 			}
 		}
 
-		if (world.pipe_count() < 2 &&  world.chance(world.new_pipe_chance)) {
+		if (world.pipe_count() < world.max_pipes){//}&& world.chance(world.new_pipe_chance)) {
 			world.new_pipe(update_data);
 			if (update_data.type == PipeUpdataType::NEW) {
 				NewPipeData& newData = update_data.data.newPipeData;
@@ -495,7 +590,7 @@ public:
 		//glUniform1i(program.uniforms.TextureID, 0);
 
 		// set the light position
-		glm::vec3 lightPos = glm::vec3(4, 4, 4);
+		glm::vec3 lightPos = glm::vec3(10, 10,10);
 		glUniform3f(program.uniforms.LightID, lightPos.x, lightPos.y, lightPos.z);
 
 		double prevTime = glfwGetTime();
@@ -508,7 +603,7 @@ public:
 
 			// check if the world should be updated
 			double curTime = glfwGetTime();
-			if (curTime - prevTime >= 1.0L) {
+			if (curTime - prevTime >= .25L) {
 				prevTime = curTime;
 				update_world();
 			}

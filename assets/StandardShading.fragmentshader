@@ -1,4 +1,4 @@
-#version 330 core
+#version 460 core
 
 // Interpolated values from the vertex shaders
 //in vec2 UV;
@@ -21,7 +21,7 @@ void main(){
 	// Light emission properties
 	// You probably want to put them as uniforms
 	vec3 LightColor = vec3(1,1,1);
-	float LightPower = 50.0f;
+	float LightPower = 2.0f;
 	
 	// Material properties
 	vec3 MaterialDiffuseColor = pipe_color;
@@ -52,12 +52,19 @@ void main(){
 	//  - Looking elsewhere -> < 1
 	float cosAlpha = clamp( dot( E,R ), 0,1 );
 	
+	vec3 dir = normalize(LightPosition_worldspace - Position_worldspace);
+	float wangle = length(dot(l, n));
+	float dist = length(Position_worldspace - LightPosition_worldspace);
+	float att = 1.0 / (1.0 + 0.1*dist + 0.01*dist*dist);
+	//color = pipe_color * vec3((LightPower * att));
+	color = pipe_color * vec3(LightPower * att * abs(dot(dir, Normal_cameraspace)));
+	/*
 	color = 
 		// Ambient : simulates indirect lighting
 		MaterialAmbientColor +
 		// Diffuse : "color" of the object
-		MaterialDiffuseColor * LightColor * LightPower * cosTheta / (distance*distance) +
+		MaterialDiffuseColor * LightColor * LightPower * cosTheta / (distance*distance);
 		// Specular : reflective highlight, like a mirror
-		MaterialSpecularColor * LightColor * LightPower * pow(cosAlpha,5) / (distance*distance);
-
+		//MaterialSpecularColor * LightColor * LightPower * pow(cosAlpha,5) / (distance*distance);
+	*/
 }

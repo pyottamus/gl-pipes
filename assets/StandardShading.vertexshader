@@ -1,4 +1,4 @@
-#version 330 core
+#version 460 core
 
 // Input vertex data, different for all executions of this shader.
 layout(location = 0) in vec3 vertexPosition_modelspace;
@@ -33,10 +33,11 @@ void main(){
 
 	// Vector that goes from the vertex to the light, in camera space. M is ommited because it's identity.
 	vec3 LightPosition_cameraspace = ( (V * M) * vec4(LightPosition_worldspace,1)).xyz;
-	LightDirection_cameraspace = LightPosition_cameraspace + EyeDirection_cameraspace;
+	
+	LightDirection_cameraspace = normalize(LightPosition_cameraspace - vertexPosition_cameraspace);
 	
 	// Normal of the the vertex, in camera space
-	Normal_cameraspace = ( V * M * vec4(vertexNormal_modelspace,0)).xyz; // Only correct if ModelMatrix does not scale the model ! Use its inverse transpose if not.
+	Normal_cameraspace = (inverse(transpose(V * M)) * vec4(vertexNormal_modelspace,0)).xyz; // Only correct if ModelMatrix does not scale the model ! Use its inverse transpose if not.
 	
 	// UV of the vertex. No special space for this one.
 	//UV = vertexUV;
