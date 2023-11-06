@@ -1,0 +1,6 @@
+[submodule "src/deps/glfw"]
+	path = src/deps/glfw
+	url = https://github.com/glfw/glfw.git
+[submodule "src/deps/glm"]
+	path = src/deps/glm
+	url = https://github.com/g-truc/glm.git

@@ -6,6 +6,7 @@
 #include <optional>
 #include  <numeric>
 #include "pyo_stddef.h"
+
 enum class Direction {
     North,
     South,

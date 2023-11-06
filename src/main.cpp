@@ -2,7 +2,7 @@
 
 
 // Include GLEW
-#include <GL/glew.h>
+#include <glad/glad.h>
 
 // Include GLFW
 #include <GLFW/glfw3.h>
@@ -15,10 +15,12 @@
 #include "pyo_rawobj.hpp"
 #include "world.hpp"
 #include "pyo_stddef.h"
+#include "gl_classes.hpp"
 
-constexpr float PIPE_SCALE = 0.15f;
-constexpr float BALL_SCALE = 0.3f;
-constexpr float BALL_RADIUS = BALL_SCALE / 2.0f;
+//static_assert(std::is_trivially_destructible<std::vector<int>>());
+constexpr float PIPE_DIAMETER = 0.15f;
+constexpr float BALL_DIAMETER = 0.3f;
+constexpr float BALL_RADIUS = BALL_DIAMETER / 2.0f;
 constexpr int WINDOW_WIDTH = 1024;
 constexpr int WINDOW_HEIGHT = 768;
 
@@ -38,9 +40,9 @@ class GLEWTrap {
 public:
 	GLEWTrap() {
 		// Initialize GLEW
-		glewExperimental = true; // Needed for core profile
-		if (glewInit() != GLEW_OK) {
-			throw std::runtime_error("Failed to initialize GLEW");
+		//glewExperimental = true; // Needed for core profile
+		if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+			throw std::runtime_error("Failed to initialize GLAD");
 		}
 	}
 };
@@ -57,7 +59,6 @@ public:
 	}
 
 };
-GLFWwindow* window;
 
 class Window {
 public:
@@ -91,56 +92,6 @@ public:
 	}
 };
 
-template<size_t N>
-struct GLBuffers {
-	GLuint buffers[N];
-
-	GLBuffers() {
-		glCreateBuffers(N, buffers);
-	}
-	/*
-	GLBuffers(const GLBuffers& other) = delete; // copy constructor
-	GLBuffers& operator=(const GLBuffers& that) = delete;
-	
-	GLBuffers(GLBuffers&& other) {
-	
-	}
-	GLBuffers& operator=(GLBuffers&& that) {
-
-	}
-	*/
-	~GLBuffers() {
-		glDeleteBuffers(N, buffers);
-	}
-};
-class gl_error : std::exception {};
-
-struct GLMapedBuffer {
-	GLuint buffer;
-	void* data;
-	GLMapedBuffer(GLuint buffer, GLintptr offset, GLsizeiptr length, GLbitfield access) : buffer(buffer) {
-		data = glMapNamedBufferRange(buffer, offset, length, access);
-		if (data == NULL) {
-			throw gl_error();
-		}
-	}
-	~GLMapedBuffer() {
-		glUnmapNamedBuffer(buffer);
-	}
-};
-
-template<size_t N>
-struct VertexArrays {
-	GLuint vertex_arrays[N];
-
-	VertexArrays() {
-		glGenVertexArrays(N, vertex_arrays);
-	}
-
-	~VertexArrays() {
-		glDeleteVertexArrays(N, vertex_arrays);
-	}
-};
 
 struct StaticMeshes {
 	GLBuffers<2> buffers;
@@ -237,28 +188,28 @@ struct StaticMeshes {
 
 		//glEnableVertexAttribArray(2);
 
-		// 1st attribute buffer : verticies
+		// 1st attribute mapped_buffer : verticies
 		glVertexAttribPointer(
 			GLLoc::vertexPosition_modelspace, // attribute
 			3,								  // size
 			GL_FLOAT,						  // type
 			GL_FALSE,						  // normalized?
 			0,								  // stride
-			(void*)vertices_offset            // array buffer offset
+			(void*)vertices_offset            // array mapped_buffer offset
 		);
 
-		// 2rd attribute buffer : normals
+		// 2rd attribute mapped_buffer : normals
 		glVertexAttribPointer(
 			GLLoc::vertexNormal_modelspace,   // attribute
 			3,                                // size
 			GL_FLOAT,                         // type
 			GL_FALSE,                         // normalized?
 			0,                                // stride
-			(void*)normals_offset             // array buffer offset
+			(void*)normals_offset             // array mapped_buffer offset
 		);
 
 		// Set the format for the model matricies loc
-		// can't use glVertexAttribPointer since this loc's buffer will be regularly swapped out
+		// can't use glVertexAttribPointer since this loc's mapped_buffer will be regularly swapped out
 		glVertexAttribFormat(GLLoc::M, 4, GL_FLOAT, GL_FALSE, 0);
 		glVertexAttribFormat(GLLoc::M_1, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 4);
 		glVertexAttribFormat(GLLoc::M_2, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 8);
@@ -329,40 +280,18 @@ struct Texture {
 	}
 };
 */
-struct BufferStorageHelper{
-	BufferStorageHelper(GLuint buffer, size_t size) {
-		glNamedBufferStorage(buffer, (GLsizeiptr)size, nullptr, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT);
-	}
-};
-enum class PipeState {
-	ball,
-	pipe
-};
 
 struct PipeRenderData {
-	size_t numBalls = 0;
-	size_t numPipes = 0;
-	size_t buffer_size;
-	GLBuffers<1> buffer;
-	BufferStorageHelper _helper;
-	GLMapedBuffer mbuffer;
+	GLPersistentBufferDoubleStack<glm::mat4> stack_buffer;
 
-	void* nextBall;
-	void* nextPipe;
-	
 	glm::vec3 direction;
 	glm::vec3 start;
 	glm::vec3 end;
 
 	bool initialized;
 	float length;
-	PipeRenderData(size_t buffer_size) : buffer_size{ buffer_size }, _helper{ buffer.buffers[0], buffer_size * sizeof(glm::mat4)},
-		mbuffer{ buffer.buffers[0], 0, (GLsizeiptr)(buffer_size*sizeof(glm::mat4)), GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_FLUSH_EXPLICIT_BIT},
+	PipeRenderData(size_t buffer_size) : stack_buffer{ (GLsizeiptr)buffer_size },
 		initialized{ false } {
-		nextPipe = mbuffer.data;
-		nextBall = (char*)mbuffer.data + ((buffer_size - 1) * sizeof(glm::mat4));
-
-
 	}
 	void rotateTowardsDirection(glm::mat4& M) {
 		glm::vec3 rot{ direction.z, direction.y, direction.x };
@@ -386,71 +315,51 @@ struct PipeRenderData {
 			unreachable();
 		}
 	}
-	void writePipeMatrix(const glm::mat4& M) {
-		if (nextBall < nextPipe) {
-			// todo, reallocate
-			throw std::runtime_error("out of buffer space");
-		}
 
-		memcpy(nextPipe, &M, sizeof(glm::mat4));
-		glFlushMappedBufferRange(buffer.buffers[0], numPipes * sizeof(glm::mat4), sizeof(glm::mat4));
-		++numPipes;
-		nextPipe = (void*)((char*)nextPipe + sizeof(glm::mat4));
-	}
-	void writeBallMatrix(const glm::mat4& M) {
-		if (nextBall < nextPipe) {
-			// todo, reallocate
-			throw std::runtime_error("out of buffer space");
-		}
-
-		memcpy(nextBall, &M, sizeof(glm::mat4));
-		glFlushMappedBufferRange(buffer.buffers[0], (char*)nextBall - (char*)mbuffer.data, sizeof(glm::mat4));
-		nextBall = (void*)((char*)nextBall - sizeof(glm::mat4));
-		++numBalls;
+	GLsizeiptr pipes_size() const noexcept {
+		return stack_buffer.left_size();
 	}
 
-	void updatePipeMatrix(const glm::mat4& M) {
-		void* curPipe = (void*)((char*)nextPipe - sizeof(glm::mat4));
-		memcpy(curPipe, &M, sizeof(glm::mat4));
-		glFlushMappedBufferRange(buffer.buffers[0], (numPipes - 1)* sizeof(glm::mat4), sizeof(glm::mat4));
+	GLsizeiptr balls_size() const noexcept{
+		return stack_buffer.right_size();
 	}
-
-	GLsizeiptr ball_offset() {
-		return (buffer_size - numBalls) * sizeof(glm::mat4);
+	GLsizeiptr pipe_offset() const noexcept {
+		return 0;
+	}
+	GLsizeiptr ball_offset() const noexcept {
+		return stack_buffer.right_offset() *  sizeof(glm::mat4);
 	}
 
 	void addPipeFromBall(glm::vec3 ballCenter) {
 		glm::vec3 ballEdge_r = ballCenter + direction * BALL_RADIUS;
 		start = ballEdge_r;
 		end = ballCenter + direction - direction * BALL_RADIUS;
-		length = 1.0f - BALL_SCALE;
+		length = 1.0f - BALL_DIAMETER;
 
 
 		glm::vec3 center = start + (end - start) / 2.0f;
-		float scale = length / PIPE_SCALE;
+		float scale = length / PIPE_DIAMETER;
 
 		glm::mat4 M = glm::translate(glm::identity<glm::mat4>(), center);
 		rotateTowardsDirection(M);
 		M = glm::scale(M, glm::vec3{ 1,  scale, 1 });
 		// a pipe originating from a ball is always a new pipe
-		writePipeMatrix(M);
+		stack_buffer.push_left(M);
 	}
 	void addBend(Direction newDirection, glm::vec3 ballCenter2, glm::vec3 cur_node) {
 
+		// update the previous pipe so it connects with this ball
 		end += direction;
 		length += 1;
 		glm::vec3 ballCenter = end + direction * BALL_RADIUS;
-		
-		// update the previous pipe so it connects with this ball
-
-		float scale = length / (float)(PIPE_SCALE);
+		float scale = length / (float)(PIPE_DIAMETER);
 
 		glm::vec3 center = start + (end - start) / 2.0f;
 		glm::mat4 M = glm::translate(glm::identity<glm::mat4>(), center);
 		rotateTowardsDirection(M);
 		M = glm::scale(M, glm::vec3{ 1,  scale, 1 });
-		updatePipeMatrix(M);
-
+		stack_buffer.update_left(M);
+		// Add the bend
 		direction = dirAsVec(newDirection);
 
 		addBall(ballCenter);
@@ -460,45 +369,28 @@ struct PipeRenderData {
 	void grow(glm::vec3 node) {
 		length += 1;
 		end += direction;
-		float scale = length / (float)(PIPE_SCALE);
+		float scale = length / (float)(PIPE_DIAMETER);
 		glm::vec3 center = start + (end - start) / 2.0f;
 		glm::mat4 M = glm::translate(glm::identity<glm::mat4>(), center);
 		rotateTowardsDirection(M);
 		M = glm::scale(M, glm::vec3{ 1,  scale, 1 });
 
-		updatePipeMatrix(M);			
+		stack_buffer.update_left(M);			
 
 	}
 	void addFirstPipe(glm::vec3 center, glm::vec3 ballCenter, Direction dir) {
 		initialized = true;
 		direction = dirAsVec(dir);
-		// The first pipe must touch the ball
-		
-		// Vector pointing from ball to pipe center
-
-		
-		// solve for true_center and scaleFactor such that:
-		// - Tube starts at the edge of the ball
-		// - Tube ends at center + dir
-		// For example, if ball is at (0, 0, 0), and center is at (1, 0, 0) (dir is along x)
-		// - Normally, a tube would go from (0, 0, 0) to (1, 0, 0)
-		// - Ball edge is at (BALL_SCALE / 2, 0, 0)
-		// - Tube should start at (BALL_SCALE / 2, 0, 0)
-		// - Tube should end at   (1, 0, 0)
-		// - The tubes true_length is ||(true_end - true_start)|| = 1 - BALL_SCALE / 2
-		// - Therefore, the tubes true center is true_start + (true_end - true_start)/2
-		// - And the scaleFactor is (PIPE_SCALE) * scaleFactor = true_length, scaleFactor = true_length/PIPE_SCALE
-		
 		addPipeFromBall(ballCenter);
 	}
 
 	void addBall(glm::vec3 center) {
-		if (nextBall < nextPipe) {
-			// todo, reallocate
-			throw std::runtime_error("out of buffer space");
-		}
 		glm::mat4 M = glm::translate(glm::identity<glm::mat4>(), center);
-		writeBallMatrix(M);
+		stack_buffer.push_right(M);
+	}
+
+	const GLBuffer& buffer() {
+		return stack_buffer.buffer();
 	}
 
 };
@@ -597,13 +489,13 @@ public:
 		do {
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 			camera.update();
-
+			
 			glUniformMatrix4fv(program.uniforms.PerspectiveID, 1, GL_FALSE, &camera.projectionMatrix[0][0]);
 			glUniformMatrix4fv(program.uniforms.ViewMatrixID, 1, GL_FALSE, &camera.viewMatrix[0][0]);
 
 			// check if the world should be updated
 			double curTime = glfwGetTime();
-			if (curTime - prevTime >= .25L) {
+			if (curTime - prevTime >= .1L) {
 				prevTime = curTime;
 				update_world();
 			}
@@ -616,18 +508,17 @@ public:
 				glUniform3f(program.uniforms.ColorID, color.x, color.y, color.z);
 
 				// Draw the tubes
-				if (prd.numPipes) {
-					glBindVertexBuffer(GLLoc::M, prd.buffer.buffers[0], 0, sizeof(float) * 16);
-					glDrawElementsInstanced(GL_TRIANGLES, (GLsizei)(meshes.numSubElements[1] * 3), GL_UNSIGNED_SHORT, (void*)meshes.subOffsets[1], prd.numPipes);
+				if (prd.pipes_size()) {
+					glBindVertexBuffer(GLLoc::M, prd.buffer(), 0, sizeof(float) * 16);
+					glDrawElementsInstanced(GL_TRIANGLES, (GLsizei)(meshes.numSubElements[1] * 3), GL_UNSIGNED_SHORT, (void*)meshes.subOffsets[1], prd.pipes_size());
 				} 
 				// Draw the balls
-				if (prd.numBalls) {
-					glBindVertexBuffer(GLLoc::M, prd.buffer.buffers[0], prd.ball_offset(), sizeof(float) * 16);
-					glDrawElementsInstanced(GL_TRIANGLES, (GLsizei)(meshes.numSubElements[0] * 3), GL_UNSIGNED_SHORT, (void*)meshes.subOffsets[0], prd.numBalls);
+				if (prd.balls_size()) {
+					glBindVertexBuffer(GLLoc::M, prd.buffer(), prd.ball_offset(), sizeof(float) * 16);
+					glDrawElementsInstanced(GL_TRIANGLES, (GLsizei)(meshes.numSubElements[0] * 3), GL_UNSIGNED_SHORT, (void*)meshes.subOffsets[0], prd.balls_size());
 				}
 			}
 
-			// Swap buffers
 			glfwSwapBuffers(window);
 			glfwPollEvents();
 
