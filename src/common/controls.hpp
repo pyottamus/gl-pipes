@@ -15,15 +15,47 @@ namespace _KeyBinds {
 		forward = 0,
 		backward = 1,
 		right = 2,
-		left = 3
+		left = 3,
 	};
 }
 using KeyBinds = _KeyBinds::KeyBinds;
+
+namespace _keymap_type {
+	enum keymap_type : uint8_t {
+		TRIGGER = 0,
+		TIMED = 1,
+		TOGGLE = 2
+	};
+
+}
+constexpr uint8_t keymap_type_max = 2;
+constexpr uint8_t keymap_type_bits = 2;
+constexpr uint8_t keymap_type_mask = (255 >> (8 - keymap_type_bits)) << (8 - keymap_type_bits);
+
+using keymap_type = _keymap_type::keymap_type;
+
+struct keymap_info {
+	uint8_t data;
+	
+	keymap_type getType() {
+		return (keymap_type)((data) >> (8 - keymap_type_bits));
+	}
+	uint8_t getEventId() {
+		return (data & (~keymap_type_mask)) - 1;
+	}
+	keymap_info() : data(0) {}
+	keymap_info(keymap_type type, uint8_t id) : data((type << (8 - keymap_type_bits)) | (id + 1)) {
+		int xl;
+	}
+
+
+};
 
 template<typename relthis>
 struct Camera {
 
 	bool triggers[2]{ false };
+	bool toggles[1]{ false };
 	int window_width, window_height;
 	double cursor_x, cursor_y;
 	double next_cursor_x, next_cursor_y;
@@ -55,18 +87,6 @@ struct Camera {
 
 	
 
-	struct keymap_info{
-		uint8_t data;
-
-		bool getType() {
-			return data & 128;
-		}
-		uint8_t getEventId() {
-			return data & 127;
-		}
-		keymap_info() : data(0) {}
-
-	};
 
 
 	keymap_info keyMap[190];
@@ -93,13 +113,17 @@ struct Camera {
 		glfwSetCursorPos(window, cursor_x, cursor_y);
 
 
-		keyMap[PYO_KEY_W].data = 128 | ((uint8_t)KeyBinds::forward + 1);
-		keyMap[PYO_KEY_S].data = 128 | ((uint8_t)KeyBinds::backward + 1);
-		keyMap[PYO_KEY_D].data = 128 | ((uint8_t)KeyBinds::right + 1);
-		keyMap[PYO_KEY_A].data = 128 | ((uint8_t)KeyBinds::left + 1);
+		keyMap[PYO_KEY_W] = keymap_info(keymap_type::TIMED, (uint8_t)KeyBinds::forward);
+		keyMap[PYO_KEY_S] = keymap_info(keymap_type::TIMED, (uint8_t)KeyBinds::backward);
+		keyMap[PYO_KEY_D] = keymap_info(keymap_type::TIMED, (uint8_t)KeyBinds::right);
+		keyMap[PYO_KEY_A] = keymap_info(keymap_type::TIMED, (uint8_t)KeyBinds::left);
 
-		keyMap[PYO_KEY_ESCAPE].data = 1;
-		keyMap[PYO_KEY_Q].data = 2;
+		keyMap[PYO_KEY_ESCAPE] = keymap_info(keymap_type::TRIGGER, 0);
+		keyMap[PYO_KEY_Q] = keymap_info(keymap_type::TRIGGER, 1);
+
+		keyMap[PYO_KEY_P] = keymap_info(keymap_type::TOGGLE, 0);
+
+
 
 		glfwSetKeyCallback(window, &Camera::key_callback_thunk);
 
@@ -148,6 +172,27 @@ struct Camera {
 		); 
 		
 		up = glm::cross(right, direction);
+	}
+	void handle_timed_key(GLFWwindow* window, keymap_info keydata, uint8_t key, bool action) {
+		KeyBinds binding = (KeyBinds)(keydata.getEventId());
+
+		bool state = key_states[binding];
+		bool pressed = key_states[binding];
+
+		if (action) { // GLFW_PRESS
+			key_states[binding] = true;
+			key_pressed[binding] = true;
+			key_released[binding] = false;
+		}
+		else { // GLFW_RELEASE
+
+			if (pressed) {
+				key_released[binding] = true;
+			}
+			else {
+				key_states[binding] = false;
+			}
+		}
 	}
 
 	void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
@@ -200,31 +245,25 @@ struct Camera {
 		* 
 		*/
 
-		bool type = keydata.getType();
-		if (type == 1) {// timed key
-			KeyBinds binding = (KeyBinds)(keydata.getEventId() - 1);
+		
+		switch (keydata.getType()) {
+		case keymap_type::TIMED:
+			printf("TIMED\n");
+			handle_timed_key(window, keydata, ckey, baction);
+			break;
+		case keymap_type::TRIGGER:
+			printf("TRIGGER\n");
+			if(baction)
+				triggers[(keydata.getEventId())] = true;
+			break;
+		case keymap_type::TOGGLE:
+			printf("TOGGLE\n");
 
-			bool state = key_states[binding];
-			bool pressed = key_states[binding];
-
-			if (baction) { // GLFW_PRESS
-				key_states[binding] = true;
-				key_pressed[binding] = true;
-				key_released[binding] = false;
-			}
-			else { // GLFW_RELEASE
-
-				if (pressed) {
-					key_released[binding] = true;
-				}
-				else {
-					key_states[binding] = false;
-				}
-			}
+			if (baction)
+				toggles[(keydata.getEventId())] ^= true;
+			break;
 		}
-		else {
-			triggers[(keydata.getEventId() - 1)] = true;
-		}
+
 
 	}
 	

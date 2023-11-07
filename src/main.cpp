@@ -347,24 +347,15 @@ struct PipeRenderData {
 		stack_buffer.push_left(M);
 	}
 	void addBend(Direction newDirection, glm::vec3 ballCenter2, glm::vec3 cur_node) {
-
-		// update the previous pipe so it connects with this ball
-		end += direction;
-		length += 1;
 		glm::vec3 ballCenter = end + direction * BALL_RADIUS;
-		float scale = length / (float)(PIPE_DIAMETER);
-
-		glm::vec3 center = start + (end - start) / 2.0f;
-		glm::mat4 M = glm::translate(glm::identity<glm::mat4>(), center);
-		rotateTowardsDirection(M);
-		M = glm::scale(M, glm::vec3{ 1,  scale, 1 });
-		stack_buffer.update_left(M);
-		// Add the bend
-		direction = dirAsVec(newDirection);
 
 		addBall(ballCenter);
+		direction = dirAsVec(newDirection);
 		addPipeFromBall(ballCenter);
-
+	}
+	void kill() {
+		glm::vec3 ballCenter = end + direction * BALL_RADIUS;
+		addBall(ballCenter);
 	}
 	void grow(glm::vec3 node) {
 		length += 1;
@@ -456,6 +447,11 @@ public:
 					pipe_render_data[i].addFirstPipe(straightData.current_node, straightData.last_node, straightData.current_dir);
 					break;
 				}
+				case PipeUpdataType::DIED: {
+					printf("Dead Pipe\n");
+					pipe_render_data[i].kill();
+					break;
+				}
 				default:
 					unreachable();
 
@@ -497,7 +493,8 @@ public:
 			double curTime = glfwGetTime();
 			if (curTime - prevTime >= .1L) {
 				prevTime = curTime;
-				update_world();
+				if(camera.toggles[0] == false)
+					update_world();
 			}
 
 			// Draw each pipe

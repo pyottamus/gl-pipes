@@ -21,7 +21,8 @@ enum class PipeUpdataType {
     PIPE_BEND,
     FIRST_PIPE,
     FIRST_PIPE_BEND,
-    NEW
+    NEW,
+    DIED
 };
 struct PipeStraightData {
     glm::uvec3 last_node;
@@ -214,7 +215,7 @@ bool is_in_bounds(glm::uvec3 coord, glm::uvec3 bounds) {
 struct Pipe {
     bool alive;
     glm::uvec3 space_bounds;
-
+    float turn_urge;
     std::vector<glm::uvec3> nodes;
     Direction current_dir;
 
@@ -222,7 +223,7 @@ struct Pipe {
         return nodes.size();
     }
 
-    Pipe(glm::uvec3 space_bounds, Ocupied& ocupied_nodes, auto& rng) : alive{ true }, space_bounds { space_bounds } {
+    Pipe(glm::uvec3 space_bounds, Ocupied& ocupied_nodes, auto& rng) : alive{ true }, space_bounds{ space_bounds }, turn_urge{ 0.0 } {
         nodes.emplace_back(get_random_start(ocupied_nodes, rng));
     }
 
@@ -233,14 +234,16 @@ struct Pipe {
         return nodes.back();
     }
 
-    void kill(){}
+    void kill(){
+        alive = false;
+    }
     void update(Ocupied& ocupied_nodes, auto& rng) {
         if(!alive)
             return;
         
         size_t num_nodes = nodes.size();
         uint8_t directions_to_try[6] = { 0, 1, 2, 3, 4, 5 };
-        bool want_to_turn = std::uniform_int_distribution<>(0, 1)(rng);
+        bool want_to_turn = std::uniform_real_distribution<float>(0., 1.)(rng) <= turn_urge;
         
 
         if (num_nodes > 1 && !want_to_turn) {
@@ -263,6 +266,10 @@ struct Pipe {
                 continue;
             }
             found_valid_direction = true;
+            if (current_dir != (Direction)dir)
+                turn_urge = 0;
+            else
+                turn_urge += .1;
             current_dir = (Direction)dir;
             break;
         }
@@ -327,6 +334,18 @@ struct World {
         return active_pipes == 0;
     }
     void pipe_update(PipeUpdateData& data, size_t pipe_id) {
+
+        size_t total_nodes = ocupied_nodes.x * ocupied_nodes.y * ocupied_nodes.z;
+        double chance_to_kill = ((double)(ocupied_nodes.used)) / ((double)(total_nodes));
+
+        if (pipes[pipe_id].len() >= (total_nodes * 10 / 100) && chance(chance_to_kill))
+        {
+            pipes[pipe_id].kill();
+            data.type = PipeUpdataType::DIED;
+            active_pipes -= 1;
+            return;
+        }
+
         size_t color_id = pipe_id;
         glm::uvec3 last_node = pipes[pipe_id].get_current_head();
         Direction last_dir = pipes[pipe_id].get_current_dir();
@@ -334,18 +353,18 @@ struct World {
 
         pipes[pipe_id].update(ocupied_nodes, rng);
 
+
         glm::uvec3 current_node = pipes[pipe_id].get_current_head();
         Direction current_dir = pipes[pipe_id].get_current_dir();
         //Add a random chance post update to kill the pipe
         //increases the more the space is filled
-        size_t total_nodes = ocupied_nodes.x * ocupied_nodes.y * ocupied_nodes.z;
-        double chance_to_kill = ((double)(ocupied_nodes.used)) / ((double)(total_nodes));
         assert((int)current_dir >= 0 && (int)current_dir <= 5);
 
-        if (pipes[pipe_id].len() >= (total_nodes * 10 / 100) && chance(chance_to_kill))
-        {
-            pipes[pipe_id].kill();
+
+        if (pipes[pipe_id].alive == false) {
+            data.type = PipeUpdataType::DIED;
             active_pipes -= 1;
+            return;
         }
 
         if (first_pipe) {

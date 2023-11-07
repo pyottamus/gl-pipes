@@ -1,5 +1,7 @@
 # gl-pipes
 
+Heavily inspired by, and partially based off of [FaceFTW](https://github.com/FaceFTW) [gl-pipes](https://github.com/FaceFTW/gl-pipes.git)
+
 # Dependencies
 
 - [GLM](https://github.com/g-truc/glm)
@@ -71,6 +73,7 @@ After having installed all nessasary toolings, you must next donwload and build 
   git clone https://github.com/pyottamus/gl-pipes.git
   cd gl_pipes
   git checkout next
+  git submodule update --init --recursive
   ```
   
     This pleases Bill
